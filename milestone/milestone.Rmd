@@ -282,6 +282,6 @@ grid.arrange(b2_plot, n2_plot, t2_plot, b3_plot, n3_plot, t3_plot, ncol=3)
 
 [1]: https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip 'Download Data'
 
-[2] : http://c.com
+[2]: https://github.com/venkadeshwarank/Capstone/blob/master/milestone/setup.R 'Setup.R file in GitHub'
 
-[3] : 
+[3]: https://github.com/venkadeshwarank/Capstone/blob/master/milestone/swearWords.csv 'SwearWords' 

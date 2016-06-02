@@ -132,7 +132,7 @@ $(document).ready(function () {
 </ol>
 <div id="data-acquisition" class="section level2">
 <h2>Data Acquisition</h2>
-<p>The [setup.R] [2] will create a project dectory in your local system. The data has been downloaded from <a href="https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip" title="Download Data">here</a> and extracted into the <code>data/raw</code> directory. Here we are concentrating only on the en_US files. So we can deleted the others language files.</p>
+<p>The <a href="https://github.com/venkadeshwarank/Capstone/blob/master/milestone/setup.R" title="Setup.R file in GitHub">setup.R</a> will create a project dectory in your local system. The data has been downloaded from <a href="https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip" title="Download Data">here</a> and extracted into the <code>data/raw</code> directory. Here we are concentrating only on the en_US files. So we can deleted the others language files.</p>
 <pre class="r"><code>list.files('.', recursive = T)</code></pre>
 <pre><code>##  [1] &quot;blogs_tdm_2gram.RDS&quot;        &quot;blogs_tdm_unigram.RDS&quot;     
 ##  [3] &quot;data/raw/en_US.blogs.txt&quot;   &quot;data/raw/en_US.news.txt&quot;   
@@ -219,7 +219,7 @@ sample_file_summary</code></pre>
 </div>
 <div id="preprocessing-ngram-matrix" class="section level2">
 <h2>Preprocessing NGram matrix</h2>
-<p>We have the sample records ready to convert into the ngram matrix. The character vector needs to be preprocessed. As the part of it, we need to remove the profanity words from the vector. The list of profanity words has been collected which can be found [here] [3].</p>
+<p>We have the sample records ready to convert into the ngram matrix. The character vector needs to be preprocessed. As the part of it, we need to remove the profanity words from the vector. The list of profanity words has been collected which can be found <a href="https://github.com/venkadeshwarank/Capstone/blob/master/milestone/swearWords.csv" title="SwearWords">here</a>.</p>
 <pre class="r"><code>profanity &lt;- read.csv('./data/swearWords.csv', header = F, stringsAsFactors = F)
 profanity &lt;- profanity$V1</code></pre>
 <p>The below <code>make_tdm</code> function takes vector as input and gives the <code>TermDocumentMatrix</code> as output. The vector sample will be first converted into VCorpse data type. Then we need to preprocess the data to remove punctuations, numbers, special characters, stop words and the profanity words. The resultant <code>TermDocumentMatrix</code> with the required number of n grams.</p>
@@ -316,8 +316,6 @@ twitter_tdm_3gram &lt;- make_tdm(twitter, ng=3, stopword = F)</code></pre>
 <li><p>Developing the working model of the text prediction and developing the data product in shinyapp. Since the final software will be launched in the Shinyserver, more optimization needs to be taken to reduce the memory usage and size.</p></li>
 <li><p>Finding the good smoothing method and the evaluation model will help to obtain the above goal.</p></li>
 </ol>
-<p>[2] : <a href="http://c.com" class="uri">http://c.com</a></p>
-<p>[3] :</p>
 </div>
 
 
