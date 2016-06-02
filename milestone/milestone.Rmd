@@ -1,0 +1,287 @@
+---
+title: 'Exploratory Analysis: Text Prediction with R'
+author: "Venkadeshwaran K"
+date: "June 1, 2016"
+output: html_document
+keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=T)
+```
+
+Summary:
+
+The project to build to model that predicts the text for automatic completion in mobile devices. The data has been acquired from the SwiftKey, Global Leader in text Prediction. The data can be downloaded [here][1]. This report covers the initial modules of the data product developments as listed below.
+
+1. Download and loaded the data
+
+2. Provides the basic report of summary of the dataset.
+
+3. Building the n-gram model and Reporting the interseting finding.
+
+4. Forecasting the plan to build the data product in shinyApp.
+
+
+## Data Acquisition
+
+The [setup.R] [2] will create a project dectory in your local system. The data has been downloaded from [here] [1] and extracted into the `data/raw` directory. Here we are concentrating only on the en_US files. So we can deleted the others language files.
+
+```{r proj_setup}
+list.files('.', recursive = T)
+```
+
+### R packages
+
+The below mentioned packages are necessary to simulate the below experiment. Kindly install and load the needed libraries.
+
+```{r packages, message=FALSE}
+library(tm) # Textmining package
+library(SnowballC) # For stemming words 
+library(dplyr) ## For sorting the word freqency
+library(ggplot2) ## For ploting
+library(gridExtra) ## for arranging ggplots
+library(RWeka) ## For adding ngram tokenization
+library(ngram) ## For wordcount
+library(slam) ## To perform rowsums on tdm effeciently
+```
+
+### Loading Data
+
+We can load the three files (Twitter, News, blogs) into our system to perform some intitial analysis.
+
+```{r data_loading, warning=FALSE}
+raw_files <- list.files('./data/raw/', full.names = T)
+
+f_summary <- function(filelist){
+    file_summary <- data.frame(c(0,0,0,0))
+    for(i in filelist){
+        f <- readLines(i)
+        fs <- format(object.size(f), unit = 'MB')
+        fl <- length(f)
+        fw <- wordcount(f)
+        fc <- sum(nchar(f))
+        file_summary[,i] <- c(fs, fl, fw, fc) 
+        rm(f, fs, fl, fw, fc)
+    }
+    file_summary <- file_summary[,-1]
+    colnames(file_summary) <- c('Blogs', 'News', 'Twitter')
+    row.names(file_summary) <- c('Object Size in R', 'Line Count', 'Word Count', 'Char Count')
+    return(file_summary)
+
+}
+
+raw_file_summary <- f_summary(raw_files)
+raw_file_summary
+```
+
+### Data Sampling
+
+As the dataset is very huge, we can take the 10% sample of the totat dataset for building our model. In this model, we will be using binomial distribution to pick the same data. The sample data will be placed in the `./data/sample` directory
+
+```{r data_sampling, warning=FALSE}
+set.seed(270891)
+for (i in raw_files){
+    con <- file(i,'r')
+    filename <- unlist(strsplit(i, '[/]'))[4]
+    name <- unlist(strsplit(filename, '[.]'))[2]
+    temp <- readLines(con)
+    len <- length(temp)
+    temp1 <- temp[as.logical(rbinom(len, 1, .10))] ## Sampling only 10% of the records
+    assign(name, temp1)
+    rm(temp, temp1) ## To save system memory
+    close(con)
+}
+## Writing the sample data for future reference
+write(news, './data/sample/news.txt')
+write(blogs, './data/sample/blogs.txt')
+write(twitter, './data/sample/twitter.txt')
+```
+
+Here is the summary of the sample data. 
+
+```{r sample_summary, warning=FALSE}
+sample_files <- list.files('./data/sample/', full.names = T)
+sample_file_summary <- f_summary(sample_files)
+sample_file_summary
+```
+
+## Preprocessing NGram matrix
+
+We have the sample records ready to convert into the ngram matrix. The character vector needs to be preprocessed. As the part of it, we need to remove the profanity words from the vector. The list of profanity words has been collected which can be found [here] [3]. 
+
+```{r profanity}
+profanity <- read.csv('./data/swearWords.csv', header = F, stringsAsFactors = F)
+profanity <- profanity$V1
+```
+
+The below `make_tdm` function takes vector as input and gives the `TermDocumentMatrix` as output. The vector sample will be first converted into VCorpse data type. Then we need to preprocess the data to remove punctuations, numbers, special characters, stop words and the profanity words.  The resultant `TermDocumentMatrix` with the required number of n grams.
+
+```{r tdm}
+make_tdm <- function(x, ng=1, stopword = TRUE ){
+    
+    corp <- Corpus(VectorSource(x))
+    
+    corp <- tm_map(corp, tolower) # To transform all the char to lowercase
+    corp <- tm_map(corp, removePunctuation) ## To remove punctuation
+    corp <- tm_map(corp, function(x) gsub("[^[:alnum:]]", " ", x)) # To remove special chars
+    corp <- tm_map(corp, removeNumbers) ## Numbers provides less value to predective text analysis
+    corp <- tm_map(corp, removeWords, profanity) ## To remove swearwords
+
+    if(stopword) {
+        corp <- tm_map(corp, removeWords, stopwords()) ##default language is English
+    }
+    
+    corp <- tm_map(corp, stemDocument) ## Stemming the document
+    corp <- tm_map(corp, stripWhitespace) ## To stripwhite space
+    corp <- tm_map(corp, PlainTextDocument) ## Converting to plaintext format
+    
+    ngt <- function(x) NGramTokenizer(x,control = Weka_control(min=ng, max=ng))
+    tdm <- TermDocumentMatrix(corp, control = list(tokenize= ngt))
+    
+    return(tdm)
+}
+```
+
+### Uni-Gram tokenization
+
+```{r unigram, eval=FALSE}
+news_tdm_unigram <- make_tdm(news)
+blogs_tdm_unigram <- make_tdm(blogs)
+twitter_tdm_unigram <- make_tdm(twitter)
+```
+
+```{r dummy1, echo=FALSE}
+news_tdm_unigram <- readRDS('./data/news_tdm_unigram.RDS')
+blogs_tdm_unigram <- readRDS('./data/blogs_tdm_unigram.RDS')
+twitter_tdm_unigram <- readRDS('./data/twitter_tdm_unigram.RDS')
+```
+
+## Explotary Analysis
+
+The words that occurs more than 10,000 times in the twitter can be seen here.
+
+```{r topfreq}
+findFreqTerms(twitter_tdm_unigram, 10000)
+```
+
+Lets create a frequency table for each corpse to do more further analysis on this.
+
+```{r freqtable}
+freq_table <- function(tdm){
+    temp <- row_sums(tdm)
+    df <- as.data.frame(temp)
+    df$Words <- row.names(df)
+    names(df) <- c('Frequency','Words')
+    rownames(df) <- NULL
+    df <- df %>% transform(Words = reorder(Words, Frequency)) %>%
+            arrange(desc(Frequency))
+    rm(temp)
+    return(df)
+}
+
+news_uni_freq <- freq_table(news_tdm_unigram)
+blogs_uni_freq <- freq_table(blogs_tdm_unigram)
+twitter_uni_freq <- freq_table(twitter_tdm_unigram)
+```
+
+The below shows the top 15 words in each unigram tdms. 
+
+```{r plot_uni, fig.height=4, fig.width=10}
+nu_plot <- ggplot(news_uni_freq[1:15,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 15 News Unigram') +  xlab(NULL)
+
+bu_plot <- ggplot(blogs_uni_freq[1:15,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 15 Blogs Unigram')  
+
+tu_plot <- ggplot(twitter_uni_freq[1:15,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 15 Twitter Unigram') +  xlab(NULL) 
+
+grid.arrange(bu_plot, nu_plot, tu_plot, ncol=3)
+```
+
+### di.Gram and tri.Gram
+
+The same steps has been followed to generate the 2-Gram and 3-Gram `TermDocumentMatrix`. We have passed the ng=2,3 in the `make_tdm` function. *stopwords* will be useful when forming the n gram matrix. So i have set the stopword as False.
+
+```{r n-gram, eval=F}
+news_tdm_2gram <- make_tdm(news, ng=2, stopword = F)
+blogs_tdm_2gram <- make_tdm(blogs, ng=2, stopword = F)
+twitter_tdm_2gram <- make_tdm(twitter, ng=2, stopword = F)
+
+news_tdm_3gram <- make_tdm(news, ng=3, stopword = F)
+blogs_tdm_3gram <- make_tdm(blogs, ng=3, stopword = F)
+twitter_tdm_3gram <- make_tdm(twitter, ng=3, stopword = F)
+
+```
+
+```{r dummy2, echo=F}
+news_tdm_2gram <- readRDS('./data/news_tdm_2gram.RDS')
+blogs_tdm_2gram <- readRDS('./data/blogs_tdm_2gram.RDS')
+twitter_tdm_2gram <- readRDS('./data/twitter_tdm_2gram.RDS')
+news_tdm_3gram <- readRDS('./data/news_tdm_3gram.RDS')
+blogs_tdm_3gram <- readRDS('./data/blogs_tdm_3gram.RDS')
+twitter_tdm_3gram <- readRDS('./data/twitter_tdm_3gram.RDS')
+
+news_2_freq <- freq_table(news_tdm_2gram)
+blogs_2_freq <- freq_table(blogs_tdm_2gram)
+twitter_2_freq <- freq_table(twitter_tdm_2gram)
+
+news_3_freq <- freq_table(news_tdm_3gram)
+blogs_3_freq <- freq_table(blogs_tdm_3gram)
+twitter_3_freq <- freq_table(twitter_tdm_3gram)
+```
+
+```{r plot_n, fig.height=4, fig.width=10, echo=F}
+n2_plot <- ggplot(news_2_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 News Di-gram') +  xlab(NULL)
+
+b2_plot <- ggplot(blogs_2_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 Blogs Di-gram')  
+
+t2_plot <- ggplot(twitter_2_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 Twitter Di-gram') +  xlab(NULL) 
+
+n3_plot <- ggplot(news_3_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 News Tri-gram') +  xlab(NULL)
+
+b3_plot <- ggplot(blogs_3_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 Blogs Tri-gram')  
+
+t3_plot <- ggplot(twitter_3_freq[1:10,], aes(Words, Frequency)) + 
+            geom_bar(stat = 'identity') + coord_flip() +
+    ggtitle('Top 10 Twitter Tri-gram') +  xlab(NULL) 
+
+grid.arrange(b2_plot, n2_plot, t2_plot, b3_plot, n3_plot, t3_plot, ncol=3)
+```
+
+
+## Intresting Findings:
+
+1. The use of the `row_sums` method from the slam package is more effecient than the rowSums from the base pack. And also noticed that the base rowSums is not working well on large tdm matrix. 
+
+2. In UniGram model, the top words like, love from twitter, said, people from News and one , can from blog are most unterstandable. Twitter is used for expressing love. News will often high what the leaders said about people.
+
+3. The words which are Di gram are more ofter repeated in Tri Grams with stop words or the words that appear in Unigram model. 
+
+## Next steps:
+
+1. Developing the working model of the text prediction and developing the data product in shinyapp. Since the final software will be launched in the Shinyserver, more optimization needs to be taken to reduce the memory usage and size.
+
+2. Finding the good smoothing method and the evaluation model will help to obtain the above goal.
+
+
+
+[1]: https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip 'Download Data'
+
+[2] : http://c.com
+
+[3] : 
